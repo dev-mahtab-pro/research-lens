@@ -1,0 +1,6 @@
+step 1 : open cmd then run [ollama pull gemma3:1b] (only for 1st time)
+step 2 : download the whole project file form the drive link & make sure to remove the previous one 
+setp 3 : in cmd run - ollama run gemma3:1b
+step 4 : run the project and enjoy.
+
+note : repeat step 3 everytime before running the project

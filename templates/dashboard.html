@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResearchLens - Live Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-theme="dark">
+<div class="grain-overlay"></div>
+
+<header class="site-header">
+    <div class="header-inner">
+        <div class="logo">
+            <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M24 4L40 12V28L24 44L8 28V12L24 4Z" fill="none" stroke="currentColor" stroke-width="3"/>
+                <path d="M24 13L31 17V25L24 29L17 25V17L24 13Z" fill="currentColor"/>
+            </svg>
+            <span class="logo-text">ResearchLens</span>
+            <span class="logo-tag">LIVE METRICS</span>
+        </div>
+        <div class="header-actions">
+            <nav class="header-nav">
+                <a class="nav-link" href="/">Main App</a>
+                <span class="nav-dot">/</span>
+                <span class="nav-item">Device Usage</span>
+                <span class="nav-dot">/</span>
+                <span class="nav-item">Model Throughput</span>
+            </nav>
+            <button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()" aria-label="Toggle color theme">
+                <span class="theme-toggle-track">
+                    <span class="theme-icon theme-icon-sun" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="theme-icon-svg">
+                            <circle cx="12" cy="12" r="4.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                            <path d="M12 2.5V5.2M12 18.8V21.5M21.5 12H18.8M5.2 12H2.5M18.72 5.28L16.8 7.2M7.2 16.8L5.28 18.72M18.72 18.72L16.8 16.8M7.2 7.2L5.28 5.28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                        </svg>
+                    </span>
+                    <span class="theme-icon theme-icon-moon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="theme-icon-svg">
+                            <path d="M15.4 3.6A8.9 8.9 0 1 0 20.4 18 7.4 7.4 0 1 1 15.4 3.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+                        </svg>
+                    </span>
+                </span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<section class="dashboard-hero">
+    <div class="dashboard-hero-copy">
+        <div class="hero-badge">
+            <span class="badge-dot"></span>
+            Live local telemetry
+        </div>
+        <h1 class="hero-title">Watch your AI<br><em>work in real time.</em></h1>
+        <p class="hero-subtitle">This dashboard tracks recent Azrotix.AI generation speed, active models, and how much of your CPU, RAM, and GPU your local AI stack is using.</p>
+    </div>
+    <div class="dashboard-status-card">
+        <span class="dashboard-kicker">Refresh</span>
+        <div class="dashboard-live-row">
+            <span class="live-dot" id="liveDot"></span>
+            <span id="dashboardRefreshLabel">Connecting...</span>
+        </div>
+        <p class="dashboard-mini-note" id="dashboardLastUpdated">Waiting for first metrics sample.</p>
+        <p class="dashboard-mini-note" id="dashboardRuntimeMode">Checking GPU execution mode.</p>
+    </div>
+</section>
+
+<main class="dashboard-shell">
+    <section class="dashboard-grid dashboard-top-grid">
+        <article class="dashboard-card">
+            <div class="dashboard-card-head">
+                <span class="dashboard-card-title">Last Request</span>
+                <span class="dashboard-chip" id="latestProfile">Idle</span>
+            </div>
+            <div class="metric-big" id="latestTps">--</div>
+            <div class="metric-caption">tokens / sec</div>
+            <div class="metric-inline-grid">
+                <div>
+                    <span class="metric-inline-label">Model</span>
+                    <strong id="latestModel">No recent request</strong>
+                </div>
+                <div>
+                    <span class="metric-inline-label">Generated</span>
+                    <strong id="latestGenerated">--</strong>
+                </div>
+                <div>
+                    <span class="metric-inline-label">Prompt</span>
+                    <strong id="latestPrompt">--</strong>
+                </div>
+                <div>
+                    <span class="metric-inline-label">Duration</span>
+                    <strong id="latestDuration">--</strong>
+                </div>
+            </div>
+        </article>
+
+        <article class="dashboard-card">
+            <div class="dashboard-card-head">
+                <span class="dashboard-card-title">Ollama Activity</span>
+                <span class="dashboard-chip" id="ollamaReachability">Checking...</span>
+            </div>
+            <div class="metric-big" id="activeRequests">0</div>
+            <div class="metric-caption">active AI requests</div>
+            <div class="dashboard-list" id="activeModelsList">
+                <div class="dashboard-list-empty">Checking active models...</div>
+            </div>
+        </article>
+    </section>
+
+    <section class="dashboard-grid dashboard-system-grid">
+        <article class="dashboard-card">
+            <div class="dashboard-card-head">
+                <span class="dashboard-card-title">CPU</span>
+                <span class="dashboard-chip" id="cpuLabel">Device</span>
+            </div>
+            <div class="resource-meter">
+                <div class="resource-meter-bar"><div class="resource-meter-fill" id="cpuBar"></div></div>
+                <div class="resource-meter-meta">
+                    <strong id="cpuUsage">--</strong>
+                    <span id="cpuMeta">Waiting for metrics...</span>
+                </div>
+            </div>
+        </article>
+
+        <article class="dashboard-card">
+            <div class="dashboard-card-head">
+                <span class="dashboard-card-title">Memory</span>
+                <span class="dashboard-chip">RAM</span>
+            </div>
+            <div class="resource-meter">
+                <div class="resource-meter-bar"><div class="resource-meter-fill" id="memoryBar"></div></div>
+                <div class="resource-meter-meta">
+                    <strong id="memoryUsage">--</strong>
+                    <span id="memoryMeta">Waiting for metrics...</span>
+                </div>
+            </div>
+        </article>
+
+        <article class="dashboard-card">
+            <div class="dashboard-card-head">
+                <span class="dashboard-card-title">GPU</span>
+                <span class="dashboard-chip" id="gpuLabel">Adapter</span>
+            </div>
+            <div class="resource-meter">
+                <div class="resource-meter-bar"><div class="resource-meter-fill" id="gpuBar"></div></div>
+                <div class="resource-meter-meta">
+                    <strong id="gpuUsage">--</strong>
+                    <span id="gpuMeta">Waiting for metrics...</span>
+                </div>
+            </div>
+        </article>
+    </section>
+
+    <section class="dashboard-card">
+        <div class="dashboard-card-head">
+            <span class="dashboard-card-title">Per-Model Stats</span>
+            <span class="dashboard-chip">Since app start</span>
+        </div>
+        <div class="dashboard-models" id="modelStatsGrid">
+            <div class="dashboard-list-empty">No model activity yet.</div>
+        </div>
+    </section>
+</main>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

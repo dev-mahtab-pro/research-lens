@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResearchLens - AI Research Paper Analyzer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="grain-overlay"></div>
+
+<header class="site-header">
+    <div class="header-inner">
+        <div class="logo">
+            <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M24 4L40 12V28L24 44L8 28V12L24 4Z" fill="none" stroke="currentColor" stroke-width="3"/>
+                <path d="M24 13L31 17V25L24 29L17 25V17L24 13Z" fill="currentColor"/>
+            </svg>
+            <span class="logo-text">ResearchLens</span>
+            <span class="logo-tag">PRIVATE AI</span>
+        </div>
+        <div class="header-actions">
+            <nav class="header-nav">
+                <span class="nav-item">Research Discovery</span>
+                <span class="nav-dot">/</span>
+                <a class="nav-link" href="/dashboard" target="_blank" rel="noopener noreferrer">Live Dashboard</a>
+                <span class="nav-dot">/</span>
+                <span class="nav-item">Developed by Azrotix Media</span>
+                <span class="nav-dot">/</span>
+                <span class="nav-item">Powered by Azrotix.Ai</span>
+            </nav>
+            <button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()" aria-label="Toggle color theme">
+                <span class="theme-toggle-track">
+                    <span class="theme-icon theme-icon-sun" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="theme-icon-svg">
+                            <circle cx="12" cy="12" r="4.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                            <path d="M12 2.5V5.2M12 18.8V21.5M21.5 12H18.8M5.2 12H2.5M18.72 5.28L16.8 7.2M7.2 16.8L5.28 18.72M18.72 18.72L16.8 16.8M7.2 7.2L5.28 5.28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                        </svg>
+                    </span>
+                    <span class="theme-icon theme-icon-moon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="theme-icon-svg">
+                            <path d="M15.4 3.6A8.9 8.9 0 1 0 20.4 18 7.4 7.4 0 1 1 15.4 3.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+                        </svg>
+                    </span>
+                </span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<section class="hero">
+    <div class="hero-bg-text">RESEARCH</div>
+    <div class="hero-content">
+        <div class="hero-badge">
+            <span class="badge-dot"></span>
+            Private research workflow
+        </div>
+        <h1 class="hero-title">
+            Decode.<br>
+            <em>Discover.</em><br>
+            Build.
+        </h1>
+        <p class="hero-subtitle">Analyze uploaded papers or discover prior work from your research field and theme. Crawling is done with standard web requests. Reasoning is handled inside your private research setup.</p>
+        <div class="hero-stats">
+            <div class="stat">
+                <span class="stat-num">4</span>
+                <span class="stat-label">Analysis Modes</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat">
+                <span class="stat-num">3</span>
+                <span class="stat-label">Paper Sources</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat">
+                <span class="stat-num">GPU</span>
+                <span class="stat-label">Accelerated Mode</span>
+            </div>
+        </div>
+    </div>
+    <div class="scroll-hint">
+        <span>Start Researching</span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+</section>
+
+<section class="tool-section">
+    <div class="tool-container">
+        <div class="panel panel-config">
+            <div class="panel-header">
+                <span class="panel-num">01</span>
+                <span class="panel-title">Configure Research</span>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Workflow
+                </label>
+                <div class="workflow-grid">
+                    <button class="workflow-card active" id="workflowDiscover" type="button" onclick="selectWorkflow('discover')">
+                        <span class="workflow-name">Discover Papers</span>
+                        <span class="workflow-desc">Search prior research by field and theme</span>
+                    </button>
+                    <button class="workflow-card" id="workflowAnalyze" type="button" onclick="selectWorkflow('analyze')">
+                        <span class="workflow-name">Analyze Uploaded Paper</span>
+                        <span class="workflow-desc">Run summary, weaknesses, ideas, and roadmap</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 7a4 4 0 100 8 4 4 0 000-8zM2 12h7m14 0h-4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    AI Model
+                </label>
+                <div class="input-wrapper">
+                    <select id="modelName" class="field-input model-select" onchange="selectModelFromDropdown(this)">
+                        {% for model in model_options %}
+                        <option value="{{ model.id }}" {% if model.id == configured_model %}selected{% endif %}>
+                            {{ model.label }} - {{ model.badge }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="model-summary" id="modelSummary">
+                    {% for model in model_options %}
+                    <div class="model-summary-item {% if model.id == configured_model %}active{% endif %}" data-model-summary="{{ model.id }}">
+                        <span class="model-summary-name">{{ model.label }}</span>
+                        <span class="model-summary-text">{{ model.strength }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <p class="field-hint">Use Gemma 3 1B for fast responses, Mistral Latest for a balanced mix of speed and quality, and DeepSeek R1 7B for higher accuracy and deeper reasoning.</p>
+            </div>
+
+            <div class="workflow-section" id="discoverSection">
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Research Field
+                </label>
+                <div class="input-wrapper">
+                    <input type="text" id="researchField" class="field-input" placeholder="Example: computer vision, public health, materials science" autocomplete="off" onkeydown="handleDiscoveryKeydown(event)">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 19l14-14M7 7h10v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Research Theme
+                </label>
+                <div class="input-wrapper">
+                    <textarea id="researchTheme" class="field-input field-textarea" rows="4" placeholder="Example: efficient transformer pruning for medical image segmentation" onkeydown="handleDiscoveryKeydown(event)"></textarea>
+                </div>
+                <p class="field-hint">The private model expands this into search queries, then the crawler collects papers from Google Scholar, Crossref, and arXiv.</p>
+            </div>
+
+            <div class="action-group">
+                <button class="btn-primary" id="discoverBtn" onclick="runDiscovery()">
+                    <span class="btn-text">Discover Papers</span>
+                    <span class="btn-arrow">-&gt;</span>
+                </button>
+            </div>
+            </div>
+
+            <div class="workflow-section" id="analyzeSection" style="display:none">
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.5"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.5"/></svg>
+                    Research Input
+                </label>
+                <div class="analysis-input-switch">
+                    <button class="input-method-card active" id="inputMethodUpload" type="button" onclick="selectAnalysisInput('upload')">
+                        <span class="input-method-name">Upload File</span>
+                        <span class="input-method-desc">PDF, TXT, DOC, DOCX, PPT, or PPTX</span>
+                    </button>
+                    <button class="input-method-card" id="inputMethodPaste" type="button" onclick="selectAnalysisInput('paste')">
+                        <span class="input-method-name">Paste Text</span>
+                        <span class="input-method-desc">Use abstracts, copied papers, or notes</span>
+                    </button>
+                </div>
+
+                <div class="analysis-input-panel" id="uploadInputPanel">
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('paperFile').click()">
+                        <div class="upload-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <p class="upload-text">Drop your paper here or <strong>click to browse</strong></p>
+                        <p class="upload-formats">PDF / TXT / DOCX / PPTX up to 10MB</p>
+                        <div class="upload-file-display" id="fileDisplay" style="display:none">
+                            <svg class="inline-file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                            <span id="fileName"></span>
+                            <span id="fileSize" class="file-size"></span>
+                        </div>
+                    </div>
+                    <input type="file" id="paperFile" accept=".pdf,.txt,.doc,.docx,.ppt,.pptx" style="display:none" onchange="handleFileSelect(this)">
+                </div>
+
+                <div class="analysis-input-panel" id="pasteInputPanel" style="display:none">
+                    <div class="input-wrapper">
+                        <textarea id="paperText" class="field-input field-textarea paper-textarea" rows="10" placeholder="Paste research paper text, an abstract, methodology section, notes, or any research content you want the model to analyze."></textarea>
+                    </div>
+                    <p class="field-hint">Best for copied abstracts, sections from papers, scraped text, or research notes when you do not want to upload a file.</p>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Reference Dataset
+                </label>
+                <div class="dataset-upload-panel" onclick="document.getElementById('datasetFiles').click()">
+                    <div class="dataset-upload-copy">
+                        <strong>Optional support files</strong>
+                        <span>Upload PDFs, DOCX, TXT, or slides as extra grounding context for better results.</span>
+                    </div>
+                    <div class="dataset-upload-meta" id="datasetFileSummary">No dataset files selected</div>
+                </div>
+                <input type="file" id="datasetFiles" accept=".pdf,.txt,.doc,.docx,.ppt,.pptx" multiple style="display:none" onchange="handleDatasetSelect(this)">
+                <div class="dataset-file-list" id="datasetFileList" style="display:none"></div>
+                <p class="field-hint">These files are treated as supporting research context. They help the model produce more grounded, realistic analysis from your own material.</p>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14" stroke="currentColor" stroke-width="1.5"/></svg>
+                    Analysis Mode
+                </label>
+                <div class="mode-grid">
+                    <div class="mode-card active" data-mode="summarize" onclick="selectMode(this)">
+                        <span class="mode-kicker mode-icon-shell" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="mode-icon-svg">
+                                <path d="M7 4.5h7l3.5 3.5V19.5H7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                <path d="M14 4.5V8h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                <path d="M9.5 11.5h5M9.5 14.5h5M9.5 17.5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </span>
+                        <span class="mode-name">Summarize</span>
+                        <span class="mode-desc">Plain language overview</span>
+                    </div>
+                    <div class="mode-card" data-mode="weaknesses" onclick="selectMode(this)">
+                        <span class="mode-kicker mode-icon-shell" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="mode-icon-svg">
+                                <path d="M12 3.5l6 2.5v5.5c0 4.2-2.6 7.2-6 9-3.4-1.8-6-4.8-6-9V6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                <path d="M12 8.5v4.5M12 16h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </span>
+                        <span class="mode-name">Weaknesses</span>
+                        <span class="mode-desc">Gaps and limits</span>
+                    </div>
+                    <div class="mode-card" data-mode="new_ideas" onclick="selectMode(this)">
+                        <span class="mode-kicker mode-icon-shell" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="mode-icon-svg">
+                                <path d="M12 4.5a5.5 5.5 0 00-3.7 9.6c.7.6 1.2 1.5 1.3 2.4h4.8c.1-.9.6-1.8 1.3-2.4A5.5 5.5 0 0012 4.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                <path d="M10 19.5h4M10.5 16.5h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </span>
+                        <span class="mode-name">New Ideas</span>
+                        <span class="mode-desc">Novel directions</span>
+                    </div>
+                    <div class="mode-card" data-mode="implementation" onclick="selectMode(this)">
+                        <span class="mode-kicker mode-icon-shell" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="mode-icon-svg">
+                                <path d="M4.5 6.5h8v5h-8zM11.5 12.5h8v5h-8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                <path d="M12.5 9h3m-7 6h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                <path d="M12.5 9l-2 2M11.5 15l-2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </span>
+                        <span class="mode-name">Roadmap</span>
+                        <span class="mode-desc">Actionable plan</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-group">
+                <button class="btn-secondary" id="analyzeBtn" onclick="runAnalysis()">Analyze Research Input</button>
+                <button class="btn-secondary" id="analyzeAllBtn" onclick="runAllAnalysis()">Run Full Research Report</button>
+            </div>
+            </div>
+
+            <div class="field-group config-secondary-options">
+                <label class="field-label">Internet research</label>
+                <label class="web-search-toggle">
+                    <input type="checkbox" id="internetSearch" checked>
+                    <span class="web-search-switch"></span>
+                    <span><strong>Use live web search</strong><small>Collect current papers and evidence before the local model replies.</small></span>
+                </label>
+            </div>
+
+            <div class="field-group config-secondary-options">
+                <label class="field-label">History</label>
+                <button class="history-open-btn" type="button" onclick="openHistoryPanel()">
+                    <span><strong>Saved research sessions</strong><small>Reopen previous chat, discovery, and scraping results</small></span>
+                    <span class="history-open-arrow">-&gt;</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="results-column">
+            <div class="panel panel-results" id="resultsPanel">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <span class="panel-num">02</span>
+                    <div class="panel-header-text">
+                        <span class="panel-title">Research Output</span>
+                        <span class="panel-header-note">Organized results, source context, and readable analysis</span>
+                    </div>
+                </div>
+                <div class="results-actions" id="resultsActions" style="display:none">
+                    <button class="action-btn" onclick="copyResults()" title="Copy to clipboard">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5"/></svg>
+                        Copy
+                    </button>
+                    <button class="action-btn" onclick="downloadResults()" title="Download as markdown">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        Download
+                    </button>
+                </div>
+                <button class="panel-expand-btn" type="button" onclick="togglePanelMaximize('resultsPanel')" aria-label="Maximize research output" title="Maximize research output">&#x26F6;</button>
+            </div>
+
+            <div class="empty-state" id="emptyState">
+                <div class="empty-visual">
+                    <div class="empty-orb orb1"></div>
+                    <div class="empty-orb orb2"></div>
+                    <div class="empty-orb orb3"></div>
+                    <svg class="empty-logo" viewBox="0 0 48 48" aria-hidden="true">
+                        <path d="M24 4L40 12V28L24 44L8 28V12L24 4Z" fill="none" stroke="currentColor" stroke-width="3"/>
+                        <path d="M24 13L31 17V25L24 29L17 25V17L24 13Z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <h3>Ready to Research</h3>
+                <p>Upload a paper for analysis or enter a field and theme to discover prior work.</p>
+                <div class="empty-modes">
+                    <span>Discover papers</span>
+                    <span>Summarize</span>
+                    <span>Find weaknesses</span>
+                    <span>Generate ideas</span>
+                </div>
+            </div>
+
+            <div class="loading-state" id="loadingState" style="display:none">
+                <div class="loading-animation">
+                    <div class="loading-ring"></div>
+                    <div class="loading-ring ring2"></div>
+                    <div class="loading-ring ring3"></div>
+                </div>
+                <p class="loading-text" id="loadingText">Processing research task...</p>
+                <div class="loading-progress">
+                    <div class="loading-progress-topline">
+                        <span id="loadingStatus">Preparing request...</span>
+                    </div>
+                    <div class="loading-progress-bar">
+                        <div class="loading-progress-fill" id="loadingProgressFill"></div>
+                    </div>
+                </div>
+                <p class="loading-note" id="loadingNote">Preparing your request.</p>
+                <button class="btn-secondary loading-stop" id="stopResearchBtn" type="button" onclick="stopActiveResearch()" style="display:none">Stop Research</button>
+                <div class="loading-steps" id="loadingSteps">
+                    <div class="loading-step active" id="step1">Preparing request</div>
+                    <div class="loading-step" id="step2">Collecting material</div>
+                    <div class="loading-step" id="step3">Generating local insights</div>
+                </div>
+            </div>
+
+            <div class="results-content" id="resultsContent" style="display:none">
+                <div class="result-view" id="singleResult">
+                    <div class="result-meta" id="resultMeta"></div>
+                    <div class="result-body result-surface markdown-body" id="resultBody"></div>
+                </div>
+
+                <div class="result-view" id="allResults" style="display:none">
+                    <div class="tabs" id="resultTabs">
+                        <button class="tab active" data-tab="summarize" onclick="switchTab(this, 'summarize')">Summary</button>
+                        <button class="tab" data-tab="weaknesses" onclick="switchTab(this, 'weaknesses')">Weaknesses</button>
+                        <button class="tab" data-tab="new_ideas" onclick="switchTab(this, 'new_ideas')">New Ideas</button>
+                        <button class="tab" data-tab="implementation" onclick="switchTab(this, 'implementation')">Roadmap</button>
+                    </div>
+                    <div class="tab-content" id="summarize-content"></div>
+                    <div class="tab-content" id="weaknesses-content" style="display:none"></div>
+                    <div class="tab-content" id="new_ideas-content" style="display:none"></div>
+                    <div class="tab-content" id="implementation-content" style="display:none"></div>
+                </div>
+
+                <div class="result-view" id="discoveryResult" style="display:none">
+                    <div class="result-meta" id="discoveryMeta"></div>
+                    <div class="discovery-grid">
+                        <div class="discovery-summary result-surface markdown-body" id="discoverySummary"></div>
+                        <div class="discovery-papers result-surface" id="discoveryPapers"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="error-state" id="errorState" style="display:none">
+                <div class="error-backdrop" onclick="clearError()"></div>
+                <div class="error-dialog">
+                    <svg class="error-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5m0 4h.01M10.29 3.86l-8 14A2 2 0 004 21h16a2 2 0 001.71-3.14l-8-14a2 2 0 00-3.42 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <h3 class="error-title">Request Failed</h3>
+                    <p id="errorMessage"></p>
+                    <button class="btn-retry" onclick="clearError()">Try Again</button>
+                </div>
+            </div>
+            </div>
+
+            <div class="panel panel-chat" id="chatPanel" style="display:none">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <span class="panel-num">03</span>
+                        <div class="panel-header-text">
+                            <span class="panel-title">Research Copilot</span>
+                            <span class="panel-header-note">Ask follow-up questions, compare findings, and refine your next prompt</span>
+                        </div>
+                    </div>
+                    <span class="panel-subtitle">Scoped to the latest research results</span>
+                    <button class="panel-expand-btn" type="button" onclick="togglePanelMaximize('chatPanel')" aria-label="Maximize research copilot" title="Maximize research copilot">&#x26F6;</button>
+                </div>
+                <div class="paper-insights" id="paperInsights">
+                    <div class="paper-overview" id="paperOverview"></div>
+                    <button class="start-chat-btn" id="startChatBtn" type="button" onclick="startResearchChat()">Start chat <span>-&gt;</span></button>
+                    <div class="paper-chat" id="paperChat">
+                        <div class="chat-header">
+                            <div>
+                                <div class="chat-title">Azrotix.AI</div>
+                                <div class="chat-subtitle">Ask about the current discovery or analysis output</div>
+                            </div>
+                            <div class="chat-controls">
+                                <select class="chat-model-select" id="chatModelName" aria-label="Copilot model" onchange="prepareChatModel(this.value)">
+                                    {% for model in model_options %}
+                                    <option value="{{ model.id }}" {% if model.id == configured_model %}selected{% endif %}>{{ model.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <label class="chat-web-toggle"><input type="checkbox" id="copilotWebSearch" checked> Web search</label>
+                                <button class="chat-reset" type="button" onclick="resetChat()">New chat</button>
+                            </div>
+                        </div>
+                        <div class="chat-body" id="chatMessages" aria-live="polite"></div>
+                        <form class="chat-form" id="chatForm" onsubmit="submitChat(event)">
+                            <textarea id="chatInput" rows="2" placeholder="Ask for comparisons, next prompts, search refinements, or deeper insights" onkeydown="handleChatKeydown(event)"></textarea>
+                            <button class="chat-send" type="submit" aria-label="Send message" title="Send">
+                                <svg viewBox="0 0 24 24" class="chat-send-icon" aria-hidden="true">
+                                    <path d="M21 3L10 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                    <path d="M21 3L14 21L10 14L3 10L21 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                        </form>
+                        <div class="chat-note" id="chatNote">Chat is scoped to the latest research results.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="history-modal" id="historyModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+    <div class="history-modal-backdrop" onclick="closeHistoryPanel()"></div>
+    <section class="history-modal-panel">
+        <div class="history-panel-topline">
+            <div>
+                <div class="history-title" id="historyModalTitle">Saved research sessions</div>
+                <div class="history-subtitle">Reopen previous chat, discovery, and scraping results</div>
+            </div>
+            <div class="history-modal-actions">
+                <button class="history-refresh" type="button" onclick="loadHistoryList()">Refresh</button>
+                <button class="history-close" type="button" onclick="closeHistoryPanel()" aria-label="Close history">&times;</button>
+            </div>
+        </div>
+        <div class="history-list" id="historyList">
+            <div class="history-empty">No saved history yet. Your next run will appear here automatically.</div>
+        </div>
+    </section>
+</div>
+
+<div class="timeline-modal" id="timelineModal" style="display:none">
+    <div class="timeline-backdrop" onclick="closeTimelineModal()"></div>
+    <div class="timeline-panel">
+        <div class="timeline-header">
+            <span class="timeline-kicker">Crawl Budget</span>
+            <h3>Select discovery timeline</h3>
+            <p>Choose how long the crawler should work before it stops and returns the papers collected so far.</p>
+        </div>
+        <div class="timeline-options">
+            <button class="timeline-option active" data-minutes="none" onclick="selectTimelineOption(this)">No limit</button>
+            <button class="timeline-option" data-minutes="3" onclick="selectTimelineOption(this)">3 min</button>
+            <button class="timeline-option" data-minutes="4" onclick="selectTimelineOption(this)">4 min</button>
+            <button class="timeline-option" data-minutes="5" onclick="selectTimelineOption(this)">5 min</button>
+            <button class="timeline-option" data-minutes="6" onclick="selectTimelineOption(this)">6 min</button>
+        </div>
+        <div class="timeline-actions">
+            <button class="btn-secondary" type="button" onclick="closeTimelineModal()">Cancel</button>
+            <button class="btn-primary" type="button" onclick="confirmDiscoveryTimeline()">
+                <span class="btn-text">Start Discovery</span>
+                <span class="btn-arrow">-&gt;</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<section class="how-section">
+    <div class="how-container">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title">One workspace for<br><em>discovery and analysis</em></h2>
+        <div class="workflow-thread" aria-hidden="true">
+            <svg viewBox="0 0 1200 220" class="workflow-thread-svg" preserveAspectRatio="none">
+                <path class="thread-path" d="M72 120 C170 42, 250 44, 330 124 S510 188, 612 110 S820 28, 930 118 S1088 184, 1140 102" />
+            </svg>
+        </div>
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-number">01</div>
+                <div class="step-kicker">DISCOVER</div>
+                <h3>Field and theme intake</h3>
+                <p>Enter the research field and the exact theme you want to investigate. Your local model expands it into search queries.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">02</div>
+                <div class="step-kicker">CRAWL</div>
+                <h3>Source collection</h3>
+                <p>The app crawls Google Scholar, Crossref, and arXiv with standard web requests and builds a deduplicated paper list.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">03</div>
+                <div class="step-kicker">RANK</div>
+                <h3>Local paper ranking</h3>
+                <p>The private model ranks the discovered papers, explains why they matter, and suggests the reading order.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">04</div>
+                <div class="step-kicker">ANALYZE</div>
+                <h3>Paper analysis</h3>
+                <p>Upload a selected paper to summarize it, stress-test its weaknesses, generate new ideas, or build an implementation roadmap.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer class="site-footer">
+    <div class="footer-inner">
+        <span class="logo-text">ResearchLens</span>
+        <span class="footer-sep">/</span>
+        <span>Developed by Azrotix Media
+        </span>
+        <span class="footer-sep">/</span>
+        <span>Powered by Azrotix.Ai</span>
+    </div>
+</footer>
+
+<button class="back-to-top" id="backToTop" type="button" onclick="scrollToTop()" aria-label="Back to top" title="Back to top">&#8593;</button>
+
+<script src="/static/js/main.js"></script>
+</body>
+</html>
