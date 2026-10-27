@@ -21,6 +21,30 @@ python app.py
 
 Then open your browser to: http://localhost:5000
 
+## Platform authentication and deployment
+
+The application now runs as a multi-user platform. Configure these environment variables before starting it:
+
+```text
+FLASK_SECRET_KEY=<long-random-secret>
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=<strong-password-at-least-12-characters>
+SESSION_COOKIE_SECURE=true
+DEFAULT_USER_TOKEN_LIMIT=100000
+```
+
+The administrator signs in at `/login` and manages accounts at `/admin`. Admin-issued user accounts have isolated research history, hashed passwords, active/disabled access, and token limits. Do not commit the SQLite database, secret key, or production credentials. In production, run behind HTTPS with a process manager/reverse proxy and move the database to a managed PostgreSQL service before operating at scale.
+
+### Container deployment
+
+Copy `.env.example` to `.env`, replace every placeholder, place TLS certificates at `deploy/certs/fullchain.pem` and `deploy/certs/privkey.pem`, then run:
+
+```bash
+docker compose up -d --build
+```
+
+The compose stack persists database and uploaded files in named volumes, serves HTTPS through Nginx, adds health checks, and runs Flask with Gunicorn. Create a backup from PowerShell with `./deploy/backup.ps1`. Never expose port 5000 directly to the internet.
+
 ---
 
  Features

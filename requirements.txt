@@ -2,3 +2,4 @@ Flask
 requests
 PyPDF2
 psutil
+gunicorn

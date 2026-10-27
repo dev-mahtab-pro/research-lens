@@ -6,24 +6,32 @@ import subprocess
 import threading
 import time
 import uuid
+import secrets
+import hashlib
 import zipfile
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 import requests
 import PyPDF2
 import io
+import sqlite3
+from functools import wraps
 from werkzeug.utils import secure_filename
+from werkzeug.security import check_password_hash, generate_password_hash
 try:
     import psutil
 except ImportError:  # pragma: no cover - graceful fallback when dependency is missing
     psutil = None
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true")
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_BYTES", str(80 * 1024 * 1024)))
 
 CPU_COUNT = os.cpu_count() or 8
@@ -59,6 +67,15 @@ REQUEST_HEADERS = {
 }
 DATASET_DIR = os.path.join(app.root_path, "datasets")
 HISTORY_FILE = os.path.join(DATASET_DIR, "research_history.json")
+AUTH_DB_FILE = os.path.join(DATASET_DIR, "platform.sqlite3")
+DEFAULT_USER_TOKEN_LIMIT = int(os.environ.get("DEFAULT_USER_TOKEN_LIMIT", "100000"))
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "60"))
+RATE_LIMIT_STATE = {}
+RATE_LIMIT_LOCK = threading.Lock()
+UNIVERSAL_DATASET_FILE = os.path.join(DATASET_DIR, "universal_research_dataset.json")
+UNIVERSAL_DATASET_MAX_ITEMS = int(os.environ.get("UNIVERSAL_DATASET_MAX_ITEMS", "120"))
+UNIVERSAL_CONTEXT_MAX_CHARS = int(os.environ.get("UNIVERSAL_CONTEXT_MAX_CHARS", "45000"))
 
 MODEL_RUNTIME_LIMITS = {
     "gemma3:1b": {
@@ -138,6 +155,7 @@ APP_STARTED_AT = time.time()
 OLLAMA_START_LOCK = threading.Lock()
 OLLAMA_SERVER_PROCESS = None
 OLLAMA_MODEL_PULLS = set()
+OLLAMA_MODEL_LOCK = threading.Lock()
 METRICS_LOCK = threading.Lock()
 METRICS_STATE = {
     "active_requests": 0,
@@ -171,6 +189,85 @@ def ensure_storage_dirs():
     os.makedirs(DATASET_DIR, exist_ok=True)
 
 
+def db_connection():
+    ensure_storage_dirs()
+    connection = sqlite3.connect(AUTH_DB_FILE)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def ensure_platform_db():
+    with db_connection() as db:
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user',
+            active INTEGER NOT NULL DEFAULT 1, token_limit INTEGER NOT NULL DEFAULT 100000,
+            tokens_used INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT NOT NULL,
+            metadata TEXT, created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS account_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+            token_hash TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
+            expires_at REAL NOT NULL, used_at REAL, created_at REAL NOT NULL
+        );
+        """)
+        admin_email = os.environ.get("ADMIN_EMAIL")
+        admin_password = os.environ.get("ADMIN_PASSWORD")
+        if admin_email and admin_password:
+            db.execute("INSERT OR IGNORE INTO users(email,password_hash,role,token_limit,created_at) VALUES(?,?,?,?,?)",
+                       (admin_email.lower().strip(), generate_password_hash(admin_password), "admin", 0, time.time()))
+
+
+def current_user():
+    return None
+
+
+def audit(action, user_id=None, metadata=None):
+    with db_connection() as db:
+        db.execute("INSERT INTO audit_log(user_id,action,metadata,created_at) VALUES(?,?,?,?)",
+                   (user_id, action, json.dumps(metadata or {}, ensure_ascii=True), time.time()))
+
+
+def csrf_token():
+    if not session.get("csrf_token"):
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return session["csrf_token"]
+
+
+def validate_csrf():
+    supplied = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+    expected = session.get("csrf_token")
+    return bool(supplied and expected and secrets.compare_digest(supplied, expected))
+
+
+def require_login(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user():
+            if request.path.startswith('/api/') or request.method != 'GET':
+                return jsonify({'error': 'Authentication required.'}), 401
+            return redirect(url_for('login'))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def require_admin(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user = current_user()
+        if not user or user['role'] != 'admin':
+            return jsonify({'error': 'Administrator access required.'}), 403
+        return view(*args, **kwargs)
+    return wrapped
+
+
+# Standalone mode does not initialize the optional SaaS database.
+
+
 def load_history_store():
     ensure_storage_dirs()
     if not os.path.exists(HISTORY_FILE):
@@ -193,8 +290,71 @@ def write_history_store(items):
     os.replace(temp_path, HISTORY_FILE)
 
 
+def load_universal_dataset():
+    try:
+        with open(UNIVERSAL_DATASET_FILE, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return payload if isinstance(payload, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def write_universal_dataset(items):
+    ensure_storage_dirs()
+    temp_path = UNIVERSAL_DATASET_FILE + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(items[-UNIVERSAL_DATASET_MAX_ITEMS:], handle, ensure_ascii=False, indent=2)
+    os.replace(temp_path, UNIVERSAL_DATASET_FILE)
+
+
+def update_universal_dataset(history_item):
+    """Persist completed research in a model-agnostic, automatically refreshed index."""
+    context = history_item.get("context") or {}
+    payload = history_item.get("result_payload") or {}
+    entry = {
+        "context_id": history_item.get("context_id"),
+        "created_at": history_item.get("created_at", time.time()),
+        "kind": history_item.get("kind", "research"),
+        "title": history_item.get("title", "Research item"),
+        "overview": history_item.get("overview") or context.get("overview", ""),
+        "source": context.get("paper_excerpt") or context.get("discovery_overview") or "",
+        "results": payload.get("results", {}),
+        "papers": payload.get("papers", [])[:8],
+    }
+    with HISTORY_LOCK:
+        items = [item for item in load_universal_dataset() if item.get("context_id") != entry["context_id"]]
+        items.append(entry)
+        items.sort(key=lambda item: item.get("created_at", 0))
+        write_universal_dataset(items)
+
+
+def build_universal_dataset_context(exclude_context_id=None):
+    entries = sorted(load_universal_dataset(), key=lambda item: item.get("created_at", 0), reverse=True)
+    chunks = []
+    total = 0
+    for entry in entries:
+        if exclude_context_id and entry.get("context_id") == exclude_context_id:
+            continue
+        papers = entry.get("papers") or []
+        paper_text = "\n".join(f"- {p.get('title', 'Untitled')} ({p.get('year', 'unknown')}): {p.get('summary', '')}" for p in papers[:5])
+        result_text = "\n".join(f"{name}: {clip_text(value, 4500)}" for name, value in (entry.get("results") or {}).items() if value)
+        chunk = (f"Research item: {entry.get('title', 'Untitled')}\nType: {entry.get('kind', 'research')}\n"
+                 f"Overview: {clip_text(entry.get('overview', ''), 1200)}\nSource material: {clip_text(entry.get('source', ''), 5000)}\n"
+                 f"Findings:\n{result_text}\nDiscovered papers:\n{paper_text}")
+        addition = "\n\n--- Latest shared research item ---\n" + chunk
+        if total + len(addition) > UNIVERSAL_CONTEXT_MAX_CHARS:
+            break
+        chunks.append(addition)
+        total += len(addition)
+    return "".join(chunks).strip()
+
+
 def seed_research_contexts_from_history():
-    for item in load_history_store():
+    history_items = load_history_store()
+    if not load_universal_dataset() and history_items:
+        for item in history_items:
+            update_universal_dataset(item)
+    for item in history_items:
         context = item.get("context") or {}
         context_id = item.get("context_id")
         if not context_id or not context:
@@ -234,6 +394,9 @@ def build_history_summary(item):
 
 
 def save_history_item(item):
+    user = current_user()
+    if user:
+        item["owner_id"] = int(user["id"])
     with HISTORY_LOCK:
         items = load_history_store()
         item["updated_at"] = time.time()
@@ -241,6 +404,7 @@ def save_history_item(item):
         retained.insert(0, item)
         retained = retained[:MAX_HISTORY_ITEMS]
         write_history_store(retained)
+    update_universal_dataset(item)
 
 
 def append_chat_turn(context_id, role, content):
@@ -287,7 +451,10 @@ def get_history_item(context_id):
         return None
     with HISTORY_LOCK:
         items = load_history_store()
+    user = current_user()
     for item in items:
+        if user and user["role"] != "admin" and item.get("owner_id") != int(user["id"]):
+            continue
         if item.get("context_id") == context_id:
             return item
     return None
@@ -296,6 +463,9 @@ def get_history_item(context_id):
 def list_history_items():
     with HISTORY_LOCK:
         items = load_history_store()
+    user = current_user()
+    if user and user["role"] != "admin":
+        items = [item for item in items if item.get("owner_id") == int(user["id"])]
     return [build_history_summary(item) for item in items]
 
 
@@ -372,20 +542,63 @@ def ensure_ollama_running():
     return False
 
 
-def ensure_ollama_model(model_name):
-    """Pull a configured model once in the background when it is missing."""
+def ensure_ollama_model(model_name, wait_for_model=True):
+    """Start Ollama and make sure the selected model is available before a request."""
     model_name = sanitize_model_name(model_name)
-    if model_name in OLLAMA_MODEL_PULLS or not ensure_ollama_running():
-        return
+    if not ensure_ollama_running():
+        return False
     try:
         tags = requests.get(f"{ollama_base_url()}/api/tags", timeout=3).json().get('models', [])
         installed = {normalize_model_identifier(item.get('name') or item.get('model') or '') for item in tags}
         if model_name in installed:
-            return
+            return True
     except (requests.RequestException, ValueError):
-        return
-    OLLAMA_MODEL_PULLS.add(model_name)
-    subprocess.Popen([shutil.which('ollama') or 'ollama', 'pull', model_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return False
+    executable = shutil.which('ollama')
+    if not executable:
+        return False
+    with OLLAMA_MODEL_LOCK:
+        if model_name not in OLLAMA_MODEL_PULLS:
+            OLLAMA_MODEL_PULLS.add(model_name)
+            try:
+                subprocess.run([executable, 'pull', model_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=900, check=False)
+            except (OSError, subprocess.SubprocessError):
+                OLLAMA_MODEL_PULLS.discard(model_name)
+                return False
+    if not wait_for_model:
+        return True
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        try:
+            tags = requests.get(f"{ollama_base_url()}/api/tags", timeout=3).json().get('models', [])
+            if model_name in {normalize_model_identifier(item.get('name') or item.get('model') or '') for item in tags}:
+                return True
+        except (requests.RequestException, ValueError):
+            pass
+        time.sleep(.5)
+    return False
+
+
+def warm_ollama_model(model_name):
+    """Run a tiny inference so Ollama loads the selected model into GPU memory."""
+    if not ensure_ollama_model(model_name, wait_for_model=True):
+        return False
+    try:
+        response = requests.post(
+            f"{ollama_base_url()}/api/generate",
+            json={
+                "model": sanitize_model_name(model_name),
+                "prompt": "Reply with OK.",
+                "stream": False,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
+                "options": {"num_gpu": OLLAMA_NUM_GPU, "num_predict": 4},
+            },
+            timeout=120,
+        )
+        return response.ok
+    except requests.RequestException:
+        return False
 
 
 def sanitize_model_name(model_name):
@@ -524,6 +737,11 @@ def record_ollama_metrics(model_name, payload, elapsed_seconds, profile):
         model_metrics["last_seen"] = latest_request["completed_at"]
         model_metrics["profile"] = profile
         METRICS_STATE["latest_request"] = latest_request
+    user = current_user()
+    if user and user["role"] != "admin":
+        generated = int(eval_count or 0)
+        with db_connection() as db:
+            db.execute("UPDATE users SET tokens_used=tokens_used+? WHERE id=?", (generated, int(user["id"])))
 
 
 def get_model_metrics_snapshot():
@@ -738,6 +956,11 @@ def build_dashboard_payload():
 
 def call_ollama(prompt, model_name, timeout_seconds=None, profile="analysis"):
     """Send a chat request to a local Ollama instance."""
+    if not ensure_ollama_model(model_name, wait_for_model=True):
+        raise requests.ConnectionError(
+            "Ollama could not be started or the selected model could not be installed. "
+            "Install Ollama and make sure it is available on PATH."
+        )
     started_at = time.perf_counter()
     begin_active_request(model_name, profile, prompt)
     request_kwargs = {
@@ -1322,6 +1545,9 @@ def build_chat_prompt(context, message, history):
         context_parts.append(f"Discovered papers:\n{context['paper_catalog']}")
     if context.get("source_errors"):
         context_parts.append("Source issues:\n" + "\n".join(f"- {item}" for item in context["source_errors"]))
+    universal_context = build_universal_dataset_context(exclude_context_id=context.get("context_id"))
+    if universal_context:
+        context_parts.append("Universal latest research dataset:\n" + universal_context)
 
     return f"""
 You are ResearchLens Copilot, a research assistant embedded in a local research workflow.
@@ -1664,6 +1890,14 @@ def build_analysis_prompt(prompt_template, paper_text, references, detail_level)
             "- Use the reference dataset material only to strengthen, validate, compare, or contextualize the answer.\n"
             "- If reference files and the main input conflict, mention the conflict clearly."
         )
+    universal_context = build_universal_dataset_context()
+    if universal_context:
+        prompt += (
+            "\n\nUniversal Research Dataset (automatically refreshed from the latest completed research):\n"
+            "Use it only when relevant to the current paper. Prefer the current paper when sources conflict, "
+            "and clearly distinguish shared historical evidence from the current paper.\n\n"
+            f"{universal_context}"
+        )
     return prompt, prepared_text, used_reference_context
 
 
@@ -1887,10 +2121,111 @@ Research Paper:
 Make this actionable, specific, realistic, deeply reasoned, and highly detailed rather than brief."""
 }
 
+@app.before_request
+def enforce_platform_authentication():
+    # Open standalone mode: no accounts, login, CSRF, or token gate.
+    return None
+    """
+    client_key = request.remote_addr or 'unknown'
+    now = time.time()
+    with RATE_LIMIT_LOCK:
+        recent = [stamp for stamp in RATE_LIMIT_STATE.get(client_key, []) if now - stamp < RATE_LIMIT_WINDOW_SECONDS]
+        if len(recent) >= RATE_LIMIT_MAX_REQUESTS:
+            return jsonify({'error': 'Too many requests. Please try again shortly.'}), 429
+        recent.append(now)
+        RATE_LIMIT_STATE[client_key] = recent
+    public_paths = {'/login', '/logout', '/healthz'}
+    if request.path.startswith('/static/') or request.path in public_paths:
+        return None
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and (request.form or request.path.startswith('/api/admin')) and not validate_csrf():
+        return jsonify({'error': 'Invalid CSRF token.'}), 403
+    if not current_user():
+        if request.path.startswith('/api/') or request.method != 'GET':
+            return jsonify({'error': 'Authentication required.'}), 401
+        return redirect(url_for('login'))
+    user = current_user()
+    if request.method == 'POST' and request.path in ('/analyze', '/analyze_all', '/discover_papers', '/api/paper_chat') and user['role'] != 'admin' and user['token_limit'] and user['tokens_used'] >= user['token_limit']:
+        return jsonify({'error': 'Your token allowance has been reached. Contact the administrator.'}), 429
+    return None
+    """
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Content-Security-Policy', "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
+    if request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
+
+
+@app.route('/healthz')
+def healthz():
+    return jsonify({'ok': True})
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    return redirect(url_for('index'))
+
+
+@app.route('/logout')
+def logout():
+    user = current_user()
+    if user:
+        audit('logout', user['id'])
+    session.clear()
+    return redirect(url_for('login'))
+
+
+@app.route('/admin')
+def admin_panel():
+    return redirect(url_for('index'))
+
+
+@app.post('/api/admin/users')
+def admin_create_user():
+    user = current_user()
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': 'Administrator access required.'}), 403
+    payload = request.get_json(silent=True) or {}
+    email = payload.get('email', '').strip().lower()
+    password = payload.get('password', '')
+    if not email or len(password) < 12:
+        return jsonify({'error': 'A valid email and password of at least 12 characters are required.'}), 400
+    try:
+        with db_connection() as db:
+            db.execute('INSERT INTO users(email,password_hash,role,token_limit,created_at) VALUES(?,?,?,?,?)',
+                       (email, generate_password_hash(password), 'user', int(payload.get('token_limit', DEFAULT_USER_TOKEN_LIMIT)), time.time()))
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'That email already exists.'}), 409
+    audit('admin_create_user', user['id'], {'email': email})
+    return jsonify({'success': True})
+
+
+@app.patch('/api/admin/users/<int:user_id>')
+def admin_update_user(user_id):
+    user = current_user()
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': 'Administrator access required.'}), 403
+    payload = request.get_json(silent=True) or {}
+    fields, values = [], []
+    if 'active' in payload: fields += ['active=?']; values += [1 if payload['active'] else 0]
+    if 'token_limit' in payload: fields += ['token_limit=?']; values += [max(0, int(payload['token_limit']))]
+    if 'password' in payload and len(payload['password']) >= 12: fields += ['password_hash=?']; values += [generate_password_hash(payload['password'])]
+    if not fields: return jsonify({'error': 'No valid changes supplied.'}), 400
+    values.append(user_id)
+    with db_connection() as db: db.execute(f"UPDATE users SET {', '.join(fields)} WHERE id=?", values)
+    audit('admin_update_user', user['id'], {'target_user_id': user_id, 'fields': fields})
+    return jsonify({'success': True})
+
+
 @app.route('/')
 def index():
     configured_model = sanitize_model_name(DEFAULT_OLLAMA_MODEL)
-    threading.Thread(target=ensure_ollama_model, args=(configured_model,), daemon=True).start()
+    threading.Thread(target=warm_ollama_model, args=(configured_model,), daemon=True).start()
     configured_detail_level = sanitize_detail_level(DEFAULT_DETAIL_LEVEL)
     return render_template(
         'index.html',
@@ -1898,13 +2233,14 @@ def index():
         configured_detail_level=configured_detail_level,
         model_options=MODEL_OPTIONS,
         detail_level_options=DETAIL_LEVEL_OPTIONS,
+        csrf_token=csrf_token(),
     )
 
 
 @app.post('/api/ollama/prepare')
 def prepare_ollama_model():
     model_name = sanitize_model_name((request.get_json(silent=True) or {}).get('model'))
-    threading.Thread(target=ensure_ollama_model, args=(model_name,), daemon=True).start()
+    threading.Thread(target=warm_ollama_model, args=(model_name,), daemon=True).start()
     return jsonify({'success': True, 'model': model_name, 'preparing': True})
 
 
@@ -1923,6 +2259,19 @@ def api_history():
     return jsonify({
         'success': True,
         'items': list_history_items(),
+    })
+
+
+@app.route('/api/universal-dataset')
+def api_universal_dataset():
+    items = load_universal_dataset()
+    return jsonify({
+        'success': True,
+        'automatic': True,
+        'shared_across_models': True,
+        'item_count': len(items),
+        'latest_updated_at': max((item.get('created_at', 0) for item in items), default=None),
+        'context_char_limit': UNIVERSAL_CONTEXT_MAX_CHARS,
     })
 
 
@@ -2379,5 +2728,5 @@ def paper_chat():
 if __name__ == '__main__':
     # Disable Flask's reloader when running under a debugger to avoid SystemExit in debugpy.
     is_debugger_attached = os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("VSCODE_PID")
-    threading.Thread(target=ensure_ollama_model, args=(DEFAULT_OLLAMA_MODEL,), daemon=True).start()
+    threading.Thread(target=warm_ollama_model, args=(DEFAULT_OLLAMA_MODEL,), daemon=True).start()
     app.run(debug=True, port=5000, use_reloader=not is_debugger_attached)

@@ -4,5 +4,10 @@ __pycache__/
 venv/
 env/
 .env
+*.sqlite3
+backups/
+deploy/certs/
 *.log
 node_modules/
+datasets/universal_research_dataset.json
+/research-lens/

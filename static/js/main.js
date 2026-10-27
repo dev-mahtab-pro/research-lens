@@ -2,6 +2,11 @@
 // ResearchLens - Main JavaScript
 // ============================================
 
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
 let selectedMode = 'summarize';
 let currentWorkflow = 'discover';
 let currentResults = {};
@@ -165,7 +170,7 @@ function selectModelFromDropdown(select) {
     });
     fetch('/api/ollama/prepare', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken()},
         body: JSON.stringify({model: modelId}),
     }).catch(() => {});
 }
@@ -332,7 +337,7 @@ async function runAnalysis() {
     activeRequestController = new AbortController();
 
     try {
-        const response = await fetch('/analyze', { method: 'POST', body: formData, signal: activeRequestController.signal });
+        const response = await fetch('/analyze', { method: 'POST', body: formData, headers: {'X-CSRF-Token': getCsrfToken()}, signal: activeRequestController.signal });
         const data = await readJsonResponse(response, 'The analysis request failed.');
 
         if (data.error) {
@@ -381,7 +386,7 @@ async function runAllAnalysis() {
     activeRequestController = new AbortController();
 
     try {
-        const response = await fetch('/analyze_all', { method: 'POST', body: formData, signal: activeRequestController.signal });
+        const response = await fetch('/analyze_all', { method: 'POST', body: formData, headers: {'X-CSRF-Token': getCsrfToken()}, signal: activeRequestController.signal });
         const data = await readJsonResponse(response, 'The full report request failed.');
 
         if (data.error) {
@@ -454,7 +459,7 @@ async function confirmDiscoveryTimeline() {
     activeRequestController = new AbortController();
 
     try {
-        const response = await fetch('/discover_papers', { method: 'POST', body: formData, signal: activeRequestController.signal });
+        const response = await fetch('/discover_papers', { method: 'POST', body: formData, headers: {'X-CSRF-Token': getCsrfToken()}, signal: activeRequestController.signal });
         const data = await readJsonResponse(response, 'The paper discovery request failed.');
 
         if (data.error) {
@@ -896,7 +901,7 @@ function handleChatKeydown(event) {
 function prepareChatModel(model) {
     fetch('/api/ollama/prepare', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken()},
         body: JSON.stringify({ model }),
     }).catch(() => {});
 }
@@ -944,7 +949,7 @@ function renderHistoryList(items) {
 async function deleteHistoryItem(contextId, title) {
     if (!contextId || !window.confirm(`Delete ${title}? This cannot be undone.`)) return;
     try {
-        const response = await fetch(`/api/history/${encodeURIComponent(contextId)}`, { method: 'DELETE' });
+        const response = await fetch(`/api/history/${encodeURIComponent(contextId)}`, { method: 'DELETE', headers: {'X-CSRF-Token': getCsrfToken()} });
         await readJsonResponse(response, 'The history item could not be deleted.');
         if (currentResearchContextId === contextId) currentResearchContextId = null;
         await loadHistoryList();
@@ -1152,7 +1157,7 @@ async function submitChat(event) {
     try {
         const response = await fetch('/api/paper_chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
             body: JSON.stringify({
                 context_id: currentResearchContextId,
                 paper_id: currentResearchContextId,
@@ -1200,6 +1205,7 @@ async function resetChat(syncServer = true) {
         try {
             await fetch(`/api/history/${encodeURIComponent(currentResearchContextId)}/chat/reset`, {
                 method: 'POST',
+                headers: {'X-CSRF-Token': getCsrfToken()},
             });
             loadHistoryList();
         } catch (err) {
